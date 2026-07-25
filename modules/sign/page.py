@@ -242,22 +242,25 @@ def render_realtime_mode(model):
         unsafe_allow_html=True,
     )
 
-    IS_CLOUD = os.path.exists("/mount/src") or "STREAMLIT_SERVER_GATHER_USAGE_STATS" in os.environ
+    IS_CLOUD = (
+        os.path.exists("/mount/src")
+        or os.environ.get("HOME") == "/home/adminuser"
+        or "STREAMLIT_SERVER_GATHER_USAGE_STATS" in os.environ
+    )
 
-    col_launch, col_stream_opt = st.columns([1.2, 1], gap="large")
-
-    with col_launch:
-        if not IS_CLOUD:
+    if not IS_CLOUD:
+        col_launch, col_stream_opt = st.columns([1.2, 1], gap="large")
+        with col_launch:
             if st.button("🚀 Launch Dedicated 30 FPS Real-Time Window", type="primary", use_container_width=True):
                 python_exe = sys.executable
                 subprocess.Popen([python_exe, REALTIME_SCRIPT], cwd=os.path.dirname(REALTIME_SCRIPT))
                 st.success("🟢 Real-Time Camera Window launched! Look at your desktop/taskbar for the MultiVision AI live window.")
-        else:
-            st.info("☁️ **Running on Streamlit Cloud**: WebRTC stream & file uploads are active. Local desktop popups are disabled in cloud mode.")
 
-    with col_stream_opt:
-        default_idx = 1 if IS_CLOUD else 0
-        stream_option = st.radio("In-Browser Mode", ["⚡ Native OpenCV Loop (Local)", "🌐 WebRTC Stream (Cloud & Browser)"], index=default_idx, horizontal=True)
+        with col_stream_opt:
+            stream_option = st.radio("In-Browser Mode", ["⚡ Native OpenCV Loop (Local)", "🌐 WebRTC Stream"], index=0, horizontal=True)
+    else:
+        st.info("☁️ **Running on Streamlit Cloud**: WebRTC Camera Stream & File Assistants are active.")
+        stream_option = "🌐 WebRTC Stream"
 
     st.markdown("---")
 
@@ -300,7 +303,7 @@ def render_realtime_mode(model):
             render_audio_player(current_sentence, key_suffix="live_audio")
 
     with col_cam:
-        if "⚡ Native OpenCV Loop" in stream_option:
+        if "⚡ Native OpenCV Loop" in stream_option and not IS_CLOUD:
             c_sel, c1, c2 = st.columns([1, 1, 1])
             with c_sel:
                 cam_idx = st.selectbox("Camera Index", [0, 1, 2], index=0)
@@ -322,7 +325,7 @@ def render_realtime_mode(model):
                     backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
                     cap = cv2.VideoCapture(cam_idx, backend)
                     if not cap.isOpened():
-                        st.warning(f"⚠️ **Camera Index {cam_idx} Unavailable**: Could not open local webcam. On Streamlit Cloud or remote servers, please select **'🌐 WebRTC Stream'** above!")
+                        st.warning(f"⚠️ **Camera Index {cam_idx} Unavailable**: Could not open local webcam.")
                         st.session_state.is_streaming = False
                     else:
                         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -351,7 +354,7 @@ def render_realtime_mode(model):
 
                         cap.release()
                 except Exception as ex:
-                    st.warning(f"⚠️ Native OpenCV stream unavailable: {ex}. Please select **'🌐 WebRTC Stream'** above.")
+                    st.warning(f"⚠️ Native OpenCV stream unavailable: {ex}.")
                     st.session_state.is_streaming = False
 
         else:
@@ -361,7 +364,16 @@ def render_realtime_mode(model):
                 rtc_configuration=RTCConfiguration(
                     {
                         "iceServers": [
-                            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:global.stun.twilio.com:3478"]}
+                            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"]},
+                            {
+                                "urls": [
+                                    "turn:openrelay.metered.ca:80",
+                                    "turn:openrelay.metered.ca:443",
+                                    "turn:openrelay.metered.ca:443?transport=tcp",
+                                ],
+                                "username": "openrelay",
+                                "credential": "openrelay",
+                            },
                         ]
                     }
                 ),
