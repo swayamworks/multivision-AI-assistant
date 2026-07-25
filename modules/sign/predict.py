@@ -221,24 +221,35 @@ def predict_sign(model, image_input):
 
     canonical_sign = MP_GESTURE_MAP.get(mp_name, None)
 
-    # If MediaPipe detects a canonical sign with high confidence (>= 0.35), use MediaPipe
-    if canonical_sign and mp_score >= 0.35:
+    # Extract landmark features for MLP
+    mlp_label = None
+    mlp_conf  = 0.0
+
+    if _HAS_MLP and _MLP_PIPELINE is not None:
+        feats     = _normalise_landmarks(landmarks, handedness_label).reshape(1, -1)
+        proba     = _MLP_PIPELINE.predict_proba(feats)[0]
+        top_idx   = int(np.argmax(proba))
+        mlp_label = _LABEL_ENCODER.classes_[top_idx]
+        mlp_conf  = float(proba[top_idx]) * 100.0
+        for i, cls in enumerate(_LABEL_ENCODER.classes_):
+            if cls in CLASS_NAMES:
+                probs[CLASS_NAMES.index(cls)] = float(proba[i])
+
+    # If MLP detects custom signs (Please, Thanks) with high confidence (>= 40%), prioritize MLP
+    if mlp_label in ["Please", "Thanks"] and mlp_conf >= 40.0:
+        top_label  = mlp_label
+        top_conf   = mlp_conf
+        source_tag = "Custom MLP"
+    elif canonical_sign and mp_score >= 0.35:
         top_label  = canonical_sign
         top_conf   = mp_score * 100.0
         source_tag = "MediaPipe"
         if top_label in CLASS_NAMES:
             probs[CLASS_NAMES.index(top_label)] = mp_score
-    elif _HAS_MLP and _MLP_PIPELINE is not None:
-        # 2. Otherwise fall back to custom MLP classifier for Please / Thanks / custom signs
-        feats      = _normalise_landmarks(landmarks, handedness_label).reshape(1, -1)
-        proba      = _MLP_PIPELINE.predict_proba(feats)[0]
-        top_idx    = int(np.argmax(proba))
-        top_label  = _LABEL_ENCODER.classes_[top_idx]
-        top_conf   = float(proba[top_idx]) * 100.0
+    elif mlp_label is not None:
+        top_label  = mlp_label
+        top_conf   = mlp_conf
         source_tag = "Custom MLP"
-        for i, cls in enumerate(_LABEL_ENCODER.classes_):
-            if cls in CLASS_NAMES:
-                probs[CLASS_NAMES.index(cls)] = float(proba[i])
     else:
         top_label  = MP_GESTURE_MAP.get(mp_name, "Hand Detected")
         top_conf   = mp_score * 100.0

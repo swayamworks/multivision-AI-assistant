@@ -18,6 +18,10 @@ class SequenceAccumulator:
 
     def update(self, sign_label, confidence):
         """Update buffer with frame prediction. Returns True if text changed."""
+        INVALID_LABELS = {"Hand Detected", "No Hand Detected", "", "nothing", None}
+        if not sign_label or sign_label in INVALID_LABELS:
+            return False
+
         if confidence < self.min_confidence:
             return False
 
@@ -36,20 +40,26 @@ class SequenceAccumulator:
         return False
 
     def apply_sign(self, sign_label):
-        """Apply a validated sign to the text buffer."""
+        """Apply a validated sign to the text buffer with automatic comfortable word spacing."""
+        INVALID_LABELS = {"Hand Detected", "No Hand Detected", "", "nothing", None}
+        if not sign_label or sign_label in INVALID_LABELS:
+            return False
+
         changed = False
         if sign_label == "del":
             words = self.text.strip().split()
             if words:
-                self.text = " ".join(words[:-1]) + " "
+                self.text = " ".join(words[:-1]) + (" " if len(words) > 1 else "")
                 changed = True
         elif sign_label == "space" or sign_label == "nothing":
             self.last_added_sign = None
         else:
-            # Word-level signs (Hello, Thanks, Yes, No, Please, IloveYou)
-            if self.text and not self.text.endswith(" "):
-                self.text += " "
-            self.text += sign_label + " "
+            # Word-level signs (Hello, Thanks, Yes, No, Please, I Love You, Peace, Stop, Wait)
+            current_words = self.text.strip().split()
+            if not current_words:
+                self.text = sign_label + " "
+            elif current_words[-1] != sign_label:
+                self.text = self.text.strip() + " " + sign_label + " "
             changed = True
 
         return changed
