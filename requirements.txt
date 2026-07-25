@@ -1,11 +1,13 @@
 streamlit
 numpy
+pandas
 Pillow
 opencv-python-headless
 mediapipe
 av
 streamlit-webrtc
 gTTS
+pyttsx3
 ultralytics
 tensorflow-cpu
 librosa

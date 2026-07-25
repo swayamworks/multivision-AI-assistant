@@ -3,7 +3,10 @@ import cv2
 import time
 import numpy as np
 from PIL import Image
-import pyttsx3
+try:
+    import pyttsx3
+except Exception:
+    pyttsx3 = None
 import threading
 
 from modules.sign.predict import load_model, predict_sign, SIGN_EMOJIS
