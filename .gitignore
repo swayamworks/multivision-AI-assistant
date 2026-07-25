@@ -1,6 +1,11 @@
 venv/
+.venv/
 __pycache__/
 *.pyc
 .env
 .DS_Store
 yolov8n.pt
+*.exe
+dataset/
+processed/
+last.pt
