@@ -82,8 +82,13 @@ def _get_recognizer():
 
 
 def load_model(model_path: str = None):
-    """Load custom landmark MLP if present."""
+    """Load custom landmark MLP and pre-warm MediaPipe recognizer."""
     global _MLP_PIPELINE, _LABEL_ENCODER, _HAS_MLP, CLASS_NAMES
+    try:
+        _get_recognizer()
+    except Exception as e:
+        print(f"[predict] Could not pre-warm MediaPipe recognizer: {e}")
+
     if os.path.exists(MLP_PATH):
         try:
             with open(MLP_PATH, "rb") as f:

@@ -215,18 +215,22 @@ class SignVideoProcessor:
         self.latest_confidence = 0.0
 
     def recv(self, frame):
-        img_bgr = frame.to_ndarray(format="bgr24")
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        try:
+            img_bgr = frame.to_ndarray(format="bgr24")
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
-        result = predict_sign(self.model, img_rgb)
-        annotated_rgb = result["annotated_frame"]
-        annotated_bgr = cv2.cvtColor(annotated_rgb, cv2.COLOR_RGB2BGR)
+            result = predict_sign(self.model, img_rgb)
+            annotated_rgb = result["annotated_frame"]
+            annotated_bgr = cv2.cvtColor(annotated_rgb, cv2.COLOR_RGB2BGR)
 
-        self.latest_label = result["label"]
-        self.latest_confidence = result["confidence"]
-        self.accumulator.update(self.latest_label, self.latest_confidence)
+            self.latest_label = result["label"]
+            self.latest_confidence = result["confidence"]
+            self.accumulator.update(self.latest_label, self.latest_confidence)
 
-        return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
+            return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
+        except Exception:
+            img_bgr = frame.to_ndarray(format="bgr24")
+            return av.VideoFrame.from_ndarray(img_bgr, format="bgr24")
 
 
 def render_realtime_mode(model):
