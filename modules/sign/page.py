@@ -241,16 +241,22 @@ def render_realtime_mode(model):
         unsafe_allow_html=True,
     )
 
+    IS_CLOUD = os.path.exists("/mount/src") or "STREAMLIT_SERVER_GATHER_USAGE_STATS" in os.environ
+
     col_launch, col_stream_opt = st.columns([1.2, 1], gap="large")
 
     with col_launch:
-        if st.button("🚀 Launch Dedicated 30 FPS Real-Time Window", type="primary", use_container_width=True):
-            python_exe = sys.executable
-            subprocess.Popen([python_exe, REALTIME_SCRIPT], cwd=os.path.dirname(REALTIME_SCRIPT))
-            st.success("🟢 Real-Time Camera Window launched! Look at your desktop/taskbar for the MultiVision AI live window.")
+        if not IS_CLOUD:
+            if st.button("🚀 Launch Dedicated 30 FPS Real-Time Window", type="primary", use_container_width=True):
+                python_exe = sys.executable
+                subprocess.Popen([python_exe, REALTIME_SCRIPT], cwd=os.path.dirname(REALTIME_SCRIPT))
+                st.success("🟢 Real-Time Camera Window launched! Look at your desktop/taskbar for the MultiVision AI live window.")
+        else:
+            st.info("☁️ **Running on Streamlit Cloud**: WebRTC stream & file uploads are active. Local desktop popups are disabled in cloud mode.")
 
     with col_stream_opt:
-        stream_option = st.radio("In-Browser Mode", ["⚡ Native OpenCV Loop", "🌐 WebRTC Stream"], horizontal=True)
+        default_idx = 1 if IS_CLOUD else 0
+        stream_option = st.radio("In-Browser Mode", ["⚡ Native OpenCV Loop (Local)", "🌐 WebRTC Stream (Cloud & Browser)"], index=default_idx, horizontal=True)
 
     st.markdown("---")
 
@@ -293,7 +299,7 @@ def render_realtime_mode(model):
             render_audio_player(current_sentence, key_suffix="live_audio")
 
     with col_cam:
-        if stream_option == "⚡ Native OpenCV Loop":
+        if "⚡ Native OpenCV Loop" in stream_option:
             c1, c2 = st.columns(2)
             with c1:
                 start_btn = st.button("▶ Start In-Browser Stream", type="primary", use_container_width=True)
@@ -309,32 +315,40 @@ def render_realtime_mode(model):
 
             if st.session_state.is_streaming:
                 st.info("🟢 Live camera active - Press 'Stop Stream' above to end loop.")
-                cap = cv2.VideoCapture(0)
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                frame_window = st.empty()
-                status_window = st.empty()
+                try:
+                    cap = cv2.VideoCapture(0)
+                    if not cap.isOpened():
+                        st.warning("⚠️ **No Physical Camera Available On Cloud Server**: Cloud virtual machines do not have local USB cameras connected. Please switch to **'🌐 WebRTC Stream'** above to stream your browser camera!")
+                        st.session_state.is_streaming = False
+                    else:
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        frame_window = st.empty()
+                        status_window = st.empty()
 
-                acc = st.session_state.accumulator
+                        acc = st.session_state.accumulator
 
-                while cap.isOpened() and st.session_state.is_streaming:
-                    ret, frame_bgr = cap.read()
-                    if not ret:
-                        st.error("Could not access local webcam.")
-                        break
+                        while cap.isOpened() and st.session_state.is_streaming:
+                            ret, frame_bgr = cap.read()
+                            if not ret:
+                                st.error("Could not access local webcam.")
+                                break
 
-                    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-                    res = predict_sign(model, frame_rgb)
+                            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+                            res = predict_sign(model, frame_rgb)
 
-                    frame_window.image(res["annotated_frame"], caption=f"Live Recognition: {res['label']} ({res['confidence']:.1f}%)", use_container_width=True)
+                            frame_window.image(res["annotated_frame"], caption=f"Live Recognition: {res['label']} ({res['confidence']:.1f}%)", use_container_width=True)
 
-                    changed = acc.update(res["label"], res["confidence"])
-                    if changed:
-                        st.session_state.sign_sentence = acc.get_text()
+                            changed = acc.update(res["label"], res["confidence"])
+                            if changed:
+                                st.session_state.sign_sentence = acc.get_text()
 
-                    status_window.markdown(f"**Live Sign Word:** {res['label']} ({res['confidence']:.1f}%) | **Sentence:** `{acc.get_text()}`")
+                            status_window.markdown(f"**Live Sign Word:** {res['label']} ({res['confidence']:.1f}%) | **Sentence:** `{acc.get_text()}`")
 
-                cap.release()
+                        cap.release()
+                except Exception as ex:
+                    st.warning(f"⚠️ Native OpenCV stream unavailable on cloud server: {ex}. Please select **'🌐 WebRTC Stream'** above.")
+                    st.session_state.is_streaming = False
 
         else:
             ctx = webrtc_streamer(
