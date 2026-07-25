@@ -235,17 +235,18 @@ def predict_sign(model, image_input):
             if cls in CLASS_NAMES:
                 probs[CLASS_NAMES.index(cls)] = float(proba[i])
 
-    # If MLP detects custom signs (Please, Thanks) with high confidence (>= 40%), prioritize MLP
-    if mlp_label in ["Please", "Thanks"] and mlp_conf >= 40.0:
-        top_label  = mlp_label
-        top_conf   = mlp_conf
-        source_tag = "Custom MLP"
-    elif canonical_sign and mp_score >= 0.35:
+    # 1. MediaPipe canonical gestures take top priority when mp_score >= 0.45 (Hello, Yes, No, Stop, Peace, ILY, Wait)
+    if canonical_sign and mp_score >= 0.45:
         top_label  = canonical_sign
         top_conf   = mp_score * 100.0
         source_tag = "MediaPipe"
         if top_label in CLASS_NAMES:
             probs[CLASS_NAMES.index(top_label)] = mp_score
+    elif mlp_label in ["Please", "Thanks"] and mlp_conf >= 45.0:
+        # 2. Custom MLP handles Please and Thanks when MediaPipe score is lower
+        top_label  = mlp_label
+        top_conf   = mlp_conf
+        source_tag = "Custom MLP"
     elif mlp_label is not None:
         top_label  = mlp_label
         top_conf   = mlp_conf
