@@ -257,10 +257,10 @@ def render_realtime_mode(model):
                 st.success("🟢 Real-Time Camera Window launched! Look at your desktop/taskbar for the MultiVision AI live window.")
 
         with col_stream_opt:
-            stream_option = st.radio("In-Browser Mode", ["⚡ Native OpenCV Loop (Local)", "🌐 WebRTC Stream"], index=0, horizontal=True)
+            stream_option = st.radio("Camera Mode", ["📸 Streamlit Camera (100% Cloud Working)", "⚡ Native OpenCV Loop (Local)", "🌐 WebRTC Stream"], index=0, horizontal=True)
     else:
-        st.info("☁️ **Running on Streamlit Cloud**: WebRTC Camera Stream & File Assistants are active.")
-        stream_option = "🌐 WebRTC Stream"
+        st.info("☁️ **Running on Streamlit Cloud**: Streamlit Camera & File Assistants are active.")
+        stream_option = st.radio("Camera Mode", ["📸 Streamlit Camera (100% Cloud Working)", "🌐 WebRTC Stream (Experimental)"], index=0, horizontal=True)
 
     st.markdown("---")
 
@@ -303,7 +303,27 @@ def render_realtime_mode(model):
             render_audio_player(current_sentence, key_suffix="live_audio")
 
     with col_cam:
-        if "⚡ Native OpenCV Loop" in stream_option and not IS_CLOUD:
+        if "📸 Streamlit Camera" in stream_option:
+            st.markdown("##### 📸 Live Camera Capture")
+            cam_file = st.camera_input("Capture your sign gesture")
+            if cam_file is not None:
+                image = Image.open(cam_file)
+                res = predict_sign(model, image)
+
+                st.image(
+                    res["annotated_frame"],
+                    caption=f"Recognized: {res['label']} ({res['confidence']:.1f}%)",
+                    use_container_width=True,
+                )
+
+                st.markdown(f"**Detected Sign:** `{res['label']}` ({res['confidence']:.1f}%)")
+
+                changed = st.session_state.accumulator.update(res["label"], res["confidence"])
+                if changed:
+                    st.session_state.sign_sentence = st.session_state.accumulator.get_text()
+                    st.rerun()
+
+        elif "⚡ Native OpenCV Loop" in stream_option and not IS_CLOUD:
             c_sel, c1, c2 = st.columns([1, 1, 1])
             with c_sel:
                 cam_idx = st.selectbox("Camera Index", [0, 1, 2], index=0)
