@@ -1,4 +1,5 @@
 import os
+os.environ["OPENCV_LOG_LEVEL"] = "OFF"
 import sys
 import time
 import subprocess
@@ -300,9 +301,11 @@ def render_realtime_mode(model):
 
     with col_cam:
         if "⚡ Native OpenCV Loop" in stream_option:
-            c1, c2 = st.columns(2)
+            c_sel, c1, c2 = st.columns([1, 1, 1])
+            with c_sel:
+                cam_idx = st.selectbox("Camera Index", [0, 1, 2], index=0)
             with c1:
-                start_btn = st.button("▶ Start In-Browser Stream", type="primary", use_container_width=True)
+                start_btn = st.button("▶ Start Stream", type="primary", use_container_width=True)
             with c2:
                 stop_btn = st.button("⏹ Stop Stream", use_container_width=True)
 
@@ -314,11 +317,12 @@ def render_realtime_mode(model):
                 st.session_state.is_streaming = True
 
             if st.session_state.is_streaming:
-                st.info("🟢 Live camera active - Press 'Stop Stream' above to end loop.")
+                st.info(f"🟢 Live Camera {cam_idx} active - Press 'Stop Stream' above to end loop.")
                 try:
-                    cap = cv2.VideoCapture(0)
+                    backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+                    cap = cv2.VideoCapture(cam_idx, backend)
                     if not cap.isOpened():
-                        st.warning("⚠️ **No Physical Camera Available On Cloud Server**: Cloud virtual machines do not have local USB cameras connected. Please switch to **'🌐 WebRTC Stream'** above to stream your browser camera!")
+                        st.warning(f"⚠️ **Camera Index {cam_idx} Unavailable**: Could not open local webcam. On Streamlit Cloud or remote servers, please select **'🌐 WebRTC Stream'** above!")
                         st.session_state.is_streaming = False
                     else:
                         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -331,7 +335,7 @@ def render_realtime_mode(model):
                         while cap.isOpened() and st.session_state.is_streaming:
                             ret, frame_bgr = cap.read()
                             if not ret:
-                                st.error("Could not access local webcam.")
+                                st.error("Could not access camera frame.")
                                 break
 
                             frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
@@ -347,14 +351,20 @@ def render_realtime_mode(model):
 
                         cap.release()
                 except Exception as ex:
-                    st.warning(f"⚠️ Native OpenCV stream unavailable on cloud server: {ex}. Please select **'🌐 WebRTC Stream'** above.")
+                    st.warning(f"⚠️ Native OpenCV stream unavailable: {ex}. Please select **'🌐 WebRTC Stream'** above.")
                     st.session_state.is_streaming = False
 
         else:
             ctx = webrtc_streamer(
                 key="sign-webrtc-stream",
                 mode=WebRtcMode.SENDRECV,
-                rtc_configuration=RTCConfiguration({"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}),
+                rtc_configuration=RTCConfiguration(
+                    {
+                        "iceServers": [
+                            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:global.stun.twilio.com:3478"]}
+                        ]
+                    }
+                ),
                 video_processor_factory=lambda: SignVideoProcessor(model),
                 media_stream_constraints={"video": True, "audio": False},
                 async_processing=True,
