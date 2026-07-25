@@ -336,7 +336,13 @@ def render_realtime_mode(model):
                     }
                 ),
                 video_processor_factory=lambda: SignVideoProcessor(model),
-                media_stream_constraints={"video": True, "audio": False},
+                media_stream_constraints={"video": {"width": {"ideal": 640}, "height": {"ideal": 480}}, "audio": False},
+                video_html_attrs={
+                    "style": {"width": "100%", "margin": "0 auto", "border-radius": "8px"},
+                    "controls": False,
+                    "autoPlay": True,
+                    "playsInline": True,
+                },
                 async_processing=True,
             )
 
