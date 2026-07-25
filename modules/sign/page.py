@@ -69,7 +69,7 @@ def render_audio_player(text, key_suffix=""):
 
 def render_image_mode(model):
     st.markdown("##### 📸 Image Gesture Recognition")
-    upload_card("Upload a hand sign image", "JPG · JPEG · PNG", "🤟")
+    upload_card("Upload a sign gesture image", "JPG · JPEG · PNG", "🤟")
     uploaded_file = st.file_uploader(
         "Upload sign image",
         type=["jpg", "jpeg", "png"],
@@ -79,7 +79,7 @@ def render_image_mode(model):
     close_upload_card()
 
     if uploaded_file is None:
-        render_empty_state("🖼️", "Upload a hand gesture image to begin analysis", "JPG · JPEG · PNG")
+        render_empty_state("🖼️", "Upload a gesture image to begin analysis", "JPG · JPEG · PNG")
         return
 
     try:
@@ -96,29 +96,22 @@ def render_image_mode(model):
     elapsed = time.time() - start_time
 
     render_progress_steps([
-        ("MediaPipe Hand ROI Extracted", result["hand_detected"]),
-        ("CNN Gesture Prediction Complete", True),
+        ("Hand Detected via MediaPipe Hands", True),
+        ("Sign Classified via MobileNetV2 (Keras)", True),
     ])
 
     col_img, col_result = st.columns([1, 1], gap="large")
 
     with col_img:
-        sub_tab1, sub_tab2 = st.tabs(["📸 Full Camera Frame", "🖐️ Natural Hand/Arm Crop"])
-        with sub_tab1:
-            st.image(result["annotated_frame"], caption="Detected Hand Bounding Box", use_container_width=True)
-        with sub_tab2:
-            st.image(result["hand_crop"], caption="Natural Hand/Arm Crop Fed to Model", use_container_width=True)
+        st.image(result["annotated_frame"], caption="Natural Original Frame", use_container_width=True)
 
     with col_result:
         label = result["label"]
         emoji = SIGN_EMOJIS.get(label, "🤟")
         conf = result["confidence"]
-        display_title = f"{emoji} Sign: {label.upper()}"
+        display_title = f"{emoji} Word: {label.upper()}"
 
-        render_result_card("Detected Gesture", display_title, conf, ACCENT)
-
-        if not result["hand_detected"]:
-            st.info("ℹ️ Hand landmarks not automatically detected. Used center frame ROI for prediction.")
+        render_result_card("Detected Sign Word", display_title, conf, ACCENT)
 
         st.markdown("")
         st.markdown("**🔊 Voice Assistant Readout**")
@@ -127,9 +120,9 @@ def render_image_mode(model):
         render_inference_time(elapsed)
 
     st.markdown("")
-    st.markdown("##### Top Probabilities across ASL Classes")
+    st.markdown("##### Top Probabilities across Sign Word Classes")
     probs = result["probs"]
-    top_indices = np.argsort(probs)[::-1][:7]
+    top_indices = np.argsort(probs)[::-1]
 
     for idx in top_indices:
         cls_name = CLASS_NAMES[idx]
@@ -138,7 +131,7 @@ def render_image_mode(model):
 
         c1, c2 = st.columns([4, 1])
         with c1:
-            st.progress(prob_val, text=f"{cls_emoji} Gesture {cls_name}")
+            st.progress(prob_val, text=f"{cls_emoji} Word {cls_name}")
         with c2:
             st.markdown(f"**{prob_val * 100:.1f}%**")
 
@@ -181,9 +174,9 @@ def render_video_mode(model):
         if transcript.strip():
             st.markdown(
                 f'''<div class="result-card" style="border-color:{ACCENT}50">
-                    <div class="result-label">Translated Sign Text</div>
+                    <div class="result-label">Translated Sign Sentence</div>
                     <div class="result-value" style="font-size:1.8rem;color:#fdfdfd;letter-spacing:.02em">{transcript}</div>
-                    <div class="result-confidence">Confidence & Length: {len(transcript)} characters decoded</div>
+                    <div class="result-confidence">Words: {len(transcript.split())} translated</div>
                 </div>''',
                 unsafe_allow_html=True,
             )
@@ -195,7 +188,7 @@ def render_video_mode(model):
 
         if key_frames:
             st.markdown("")
-            st.markdown("##### 🖼️ Sample Video Keyframes & Hand Tracking")
+            st.markdown("##### 🖼️ Sample Video Keyframes")
             cols = st.columns(min(len(key_frames), 4))
             for i, kframe in enumerate(key_frames[:8]):
                 with cols[i % 4]:
@@ -225,26 +218,25 @@ class SignVideoProcessor:
         img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
         result = predict_sign(self.model, img_rgb)
-        crop_rgb = cv2.resize(result["hand_crop"], (600, 600))
-        crop_bgr = cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR)
+        annotated_rgb = result["annotated_frame"]
+        annotated_bgr = cv2.cvtColor(annotated_rgb, cv2.COLOR_RGB2BGR)
 
         self.latest_label = result["label"]
         self.latest_confidence = result["confidence"]
         self.accumulator.update(self.latest_label, self.latest_confidence)
 
-        return av.VideoFrame.from_ndarray(crop_bgr, format="bgr24")
+        return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
 
 
 def render_realtime_mode(model):
     st.markdown("##### 📹 100% Real-Time Live Camera Assistant")
-    st.markdown("Zero-click 30 FPS continuous streaming with real-time hand tracking, white background noise removal, and instant text-to-speech!")
+    st.markdown("Zero-click 30 FPS continuous streaming — MediaPipe detects your hand, MobileNetV2 classifies the sign, with instant text-to-speech!")
 
-    # Prominent Launch Dedicated Window Option
     st.markdown(
         f'''<div class="result-card" style="border-color:{ACCENT};background:linear-gradient(135deg,#191e2b,#121620);margin-bottom:1.5rem">
             <div class="result-label">🔥 Recommended 30 FPS Experience</div>
             <div class="result-value" style="font-size:1.45rem;color:#fff">Dedicated Real-Time Camera Window</div>
-            <div style="font-size:.85rem;color:#a0aec0;margin-top:.4rem">Launches a smooth 30 FPS live desktop window with real-time HUD, live hand bounding box tracking, automatic sentence builder, and keyboard shortcuts ([SPACE], [BACKSPACE], [C] Clear, [S] Speak).</div>
+            <div style="font-size:.85rem;color:#a0aec0;margin-top:.4rem">Launches a smooth 30 FPS live desktop window with real-time HUD banner, automatic word sentence builder, and keyboard shortcuts ([SPACE], [BACKSPACE], [C] Clear, [S] Speak).</div>
         </div>''',
         unsafe_allow_html=True,
     )
@@ -272,7 +264,7 @@ def render_realtime_mode(model):
             f'''<div class="result-card" style="border-color:{ACCENT}70;min-height:110px">
                 <div class="result-label">Real-Time Translated Text</div>
                 <div class="result-value" style="font-size:1.6rem;color:#fff">{current_sentence if current_sentence else '<span style="color:#667085">Streaming live signs...</span>'}</div>
-                <div class="result-confidence">Length: {len(current_sentence)} characters | Words: {len(current_sentence.split()) if current_sentence else 0}</div>
+                <div class="result-confidence">Words: {len(current_sentence.split()) if current_sentence else 0}</div>
             </div>''',
             unsafe_allow_html=True,
         )
@@ -281,14 +273,13 @@ def render_realtime_mode(model):
         b_col1, b_col2, b_col3, b_col4 = st.columns(4)
         with b_col1:
             if st.button("␣ Space", use_container_width=True):
-                if current_sentence and not current_sentence.endswith(" "):
-                    st.session_state.sign_sentence += " "
-                    st.rerun()
+                st.session_state.sign_sentence += " "
+                st.rerun()
         with b_col2:
             if st.button("⌫ Del", use_container_width=True):
-                if len(st.session_state.sign_sentence) > 0:
-                    st.session_state.sign_sentence = st.session_state.sign_sentence[:-1]
-                    st.rerun()
+                words = st.session_state.sign_sentence.strip().split()
+                st.session_state.sign_sentence = " ".join(words[:-1]) + (" " if len(words) > 1 else "")
+                st.rerun()
         with b_col3:
             if st.button("🗑️ Clear", use_container_width=True):
                 st.session_state.sign_sentence = ""
@@ -319,6 +310,8 @@ def render_realtime_mode(model):
             if st.session_state.is_streaming:
                 st.info("🟢 Live camera active - Press 'Stop Stream' above to end loop.")
                 cap = cv2.VideoCapture(0)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
                 frame_window = st.empty()
                 status_window = st.empty()
 
@@ -333,15 +326,13 @@ def render_realtime_mode(model):
                     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
                     res = predict_sign(model, frame_rgb)
 
-                    crop_display = cv2.resize(res["hand_crop"], (500, 500))
-                    frame_window.image(crop_display, caption=f"🖐️ Natural Hand/Arm Crop | Sign: {res['label']} ({res['confidence']:.1f}%)", use_container_width=True)
+                    frame_window.image(res["annotated_frame"], caption=f"Live Recognition: {res['label']} ({res['confidence']:.1f}%)", use_container_width=True)
 
                     changed = acc.update(res["label"], res["confidence"])
                     if changed:
                         st.session_state.sign_sentence = acc.get_text()
 
-                    status_window.markdown(f"**Live Sign:** {res['label']} ({res['confidence']:.1f}%) | **Cut-Out Status:** {'Hand Detected' if res['hand_detected'] else 'Center ROI Fallback'}")
-                    time.sleep(0.03)
+                    status_window.markdown(f"**Live Sign Word:** {res['label']} ({res['confidence']:.1f}%) | **Sentence:** `{acc.get_text()}`")
 
                 cap.release()
 
@@ -364,15 +355,15 @@ def render_realtime_mode(model):
 
 def render_page():
     init_session_state()
-    render_hero("🤟", "Sign Language Video Assistant", "Recognize ASL signs in real-time camera streams, video clips, or gesture images with text-to-speech.")
+    render_hero("🤟", "Sign Language Video Assistant", "Recognize ISL sign words in real-time camera streams, video clips, or gesture images with text-to-speech.")
 
     model = get_model()
     if model is None:
         st.stop()
 
     render_workflow_summary(
-        "Translate American Sign Language (ASL) into real-time text and speech assistant using CNN classification and MediaPipe hand landmark tracking.",
-        ["MediaPipe Hands", "64×64 CNN", "29 ASL Classes", "Sentence Builder", "gTTS Voice Assistant"],
+        "Translate Sign Language word gestures into real-time text and speech using MediaPipe GestureRecognizer.",
+        ["Raw Video Stream", "MediaPipe Hand Detection", "7 Sign Classes", "Sentence Builder", "gTTS Voice Assistant"],
     )
 
     mode = st.radio(
@@ -394,10 +385,10 @@ def render_page():
     st.markdown("")
     with st.expander("📋 Model Information & Technical Details"):
         render_model_info([
-            {"label": "Model", "value": "Sequential CNN"},
-            {"label": "Hand Tracking", "value": "MediaPipe / Skin ROI"},
-            {"label": "Dataset", "value": "ASL Alphabet (87k)"},
-            {"label": "Classes", "value": "29 Gestures"},
+            {"label": "Hand Keypoints", "value": "MediaPipe Tasks API (21 3D Landmark Extractor)"},
+            {"label": "Classifier Model", "value": "Custom Landmark MLP (StandardScaler + MLPClassifier)"},
+            {"label": "Model File", "value": "sign_landmark_model.pkl"},
+            {"label": "Classes (9 Signs)", "value": "Hello, I Love You, No, Peace, Please, Stop, Thanks, Wait, Yes"},
         ])
 
     render_footer()

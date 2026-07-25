@@ -7,7 +7,7 @@ from modules.sign.predict import predict_sign, SIGN_EMOJIS
 
 
 class SequenceAccumulator:
-    """Manages continuous sign detection debouncing, text building, and special token handling."""
+    """Manages continuous sign detection debouncing, text building, and word sequence handling."""
 
     def __init__(self, debounce_frames=3, min_confidence=35.0):
         self.text = ""
@@ -29,7 +29,6 @@ class SequenceAccumulator:
         if len(self.recent_predictions) == self.debounce_frames and len(set(self.recent_predictions)) == 1:
             stable_sign = self.recent_predictions[0]
 
-            # Avoid repeated insertion of the exact same letter consecutively unless reset
             if stable_sign != self.last_added_sign:
                 self.last_added_sign = stable_sign
                 return self.apply_sign(stable_sign)
@@ -40,33 +39,36 @@ class SequenceAccumulator:
         """Apply a validated sign to the text buffer."""
         changed = False
         if sign_label == "del":
-            if len(self.text) > 0:
-                self.text = self.text[:-1]
+            words = self.text.strip().split()
+            if words:
+                self.text = " ".join(words[:-1]) + " "
                 changed = True
-        elif sign_label == "space":
-            if len(self.text) > 0 and not self.text.endswith(" "):
-                self.text += " "
-                changed = True
-        elif sign_label == "nothing":
-            # Idle gesture, reset last_added_sign to allow repeating same letter later
+        elif sign_label == "space" or sign_label == "nothing":
             self.last_added_sign = None
         else:
-            # Letters A-Z
-            self.text += sign_label
+            # Word-level signs (Hello, Thanks, Yes, No, Please, IloveYou)
+            if self.text and not self.text.endswith(" "):
+                self.text += " "
+            self.text += sign_label + " "
             changed = True
 
         return changed
 
-    def add_character(self, char):
-        self.text += char
+    def add_word(self, word):
+        if self.text and not self.text.endswith(" "):
+            self.text += " "
+        self.text += word + " "
 
     def add_space(self):
         if len(self.text) > 0 and not self.text.endswith(" "):
             self.text += " "
 
     def backspace(self):
-        if len(self.text) > 0:
-            self.text = self.text[:-1]
+        words = self.text.strip().split()
+        if words:
+            self.text = " ".join(words[:-1]) + (" " if len(words) > 1 else "")
+        else:
+            self.text = ""
 
     def clear(self):
         self.text = ""
@@ -74,13 +76,11 @@ class SequenceAccumulator:
         self.last_added_sign = None
 
     def get_text(self):
-        return self.text
+        return self.text.strip()
 
 
-def process_video_file(model, video_path, max_frames=120, sample_rate=3):
-    """
-    Process video file frame by frame, crop hands, predict signs, and accumulate transcript.
-    """
+def process_video_file(model, video_path, max_frames=150, sample_rate=3):
+    """Process video file frame by frame, predict word signs, and accumulate transcript."""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise ValueError("Could not open video file.")
@@ -113,14 +113,14 @@ def process_video_file(model, video_path, max_frames=120, sample_rate=3):
         changed = accumulator.update(label, conf)
 
         sign_timeline.append({
-            "timestamp": timestamp,
+            "timestamp": round(timestamp, 2),
             "label": label,
-            "confidence": conf,
+            "confidence": round(conf, 1),
             "emoji": SIGN_EMOJIS.get(label, ""),
             "changed": changed
         })
 
-        if len(annotated_frames) < 16:  # Keep key gallery frames
+        if len(annotated_frames) < 16:
             annotated_frames.append(result["annotated_frame"])
 
     cap.release()

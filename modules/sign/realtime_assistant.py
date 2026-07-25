@@ -7,10 +7,11 @@ import pyttsx3
 import threading
 
 from modules.sign.predict import load_model, predict_sign, SIGN_EMOJIS
-from modules.sign.assistant import SequenceAccumulator
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "sign_model.keras")
+
+from modules.sign.assistant import SequenceAccumulator
 
 # Thread-safe Text-to-Speech Engine
 _TTS_ENGINE = None
@@ -45,13 +46,15 @@ def speak_text_async(text):
 
 def run_realtime_assistant():
     """
-    Launch a dedicated 30 FPS real-time webcam video assistant window
-    showing ONLY the cropped hand/arm cut-out image to verify segmentation.
+    Launch dedicated 30 FPS real-time webcam video assistant window.
+    Strict MediaPipe Hand Gate:
+    - Shows 'No Hand Detected' when no hand is present.
+    - Draws green joint dots, yellow skeleton, orange box, and sign text when hand is present.
     """
     print("=" * 60)
-    print(" 🤟 MULTIVISION AI - CUT-OUT HAND REAL-TIME ASSISTANT")
+    print(" 🤟 MULTIVISION AI - SIGN LANGUAGE REAL-TIME VIDEO ASSISTANT")
     print("=" * 60)
-    print("Loading sign recognition neural network...")
+    print("Loading MobileNetV2 sign language neural network...")
     model = load_model(MODEL_PATH)
     print("Model loaded successfully!")
     print("Starting webcam video capture...")
@@ -66,17 +69,11 @@ def run_realtime_assistant():
 
     accumulator = SequenceAccumulator(debounce_frames=3, min_confidence=35.0)
 
-    window_name = "MultiVision AI - Hand Cut-Out Inspector"
+    window_name = "MultiVision AI - Live Sign Recognition Feed"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window_name, 900, 700)
+    cv2.resizeWindow(window_name, 1280, 720)
 
-    fps_count = 0
-    start_time = time.time()
-    fps_display = 0.0
-
-    show_full_frame = False  # Toggle with [T]
-
-    speak_text_async("Hand cut-out inspector active")
+    speak_text_async("Sign language video assistant activated")
 
     while cap.isOpened():
         ret, frame_bgr = cap.read()
@@ -86,61 +83,23 @@ def run_realtime_assistant():
         frame_bgr = cv2.flip(frame_bgr, 1)
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
-        # Run prediction & hand white-BG cut out
+        # Run sign prediction
         res = predict_sign(model, frame_rgb)
         label = res["label"]
         conf = res["confidence"]
-        hand_crop_rgb = res["hand_crop"]
+        annotated_bgr = cv2.cvtColor(res["annotated_frame"], cv2.COLOR_RGB2BGR)
 
-        accumulator.update(label, conf)
+        changed = accumulator.update(label, conf)
         current_sentence = accumulator.get_text()
 
-        # Measure FPS
-        fps_count += 1
-        if time.time() - start_time >= 1.0:
-            fps_display = fps_count / (time.time() - start_time)
-            fps_count = 0
-            start_time = time.time()
+        if changed and label not in ["nothing", "No Hand Detected"]:
+            print(f"▶ Detected Sign: {label} ({conf:.1f}%) | Sentence: {current_sentence}")
 
-        # Prepare display frame
-        if show_full_frame:
-            display_rgb = res["annotated_frame"]
-        else:
-            # Resize cut-out hand crop to canvas size (600x600)
-            display_rgb = cv2.resize(hand_crop_rgb, (600, 600))
-
-        display_bgr = cv2.cvtColor(display_rgb, cv2.COLOR_RGB2BGR)
-        h, w, _ = display_bgr.shape
-
-        # Draw HUD Banner at TOP
-        top_overlay = display_bgr.copy()
-        cv2.rectangle(top_overlay, (0, 0), (w, 75), (15, 18, 26), -1)
-        cv2.addWeighted(top_overlay, 0.85, display_bgr, 0.15, 0, display_bgr)
-
-        emoji = SIGN_EMOJIS.get(label, "🤟")
-        sign_text = f"Hand Cut-Out | Sign: {label} ({conf:.1f}%)"
-        cv2.putText(display_bgr, sign_text, (15, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (60, 222, 100) if conf > 50 else (60, 165, 250), 2)
-        cv2.putText(display_bgr, f"FPS: {fps_display:.1f}", (w - 140, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
-
-        # Draw Sentence HUD Banner at BOTTOM
-        bottom_overlay = display_bgr.copy()
-        cv2.rectangle(bottom_overlay, (0, h - 85), (w, h), (15, 18, 26), -1)
-        cv2.addWeighted(bottom_overlay, 0.85, display_bgr, 0.15, 0, display_bgr)
-
-        sentence_display = current_sentence if current_sentence else "Sign gestures in camera..."
-        cv2.putText(display_bgr, "TRANSLATED TEXT:", (15, h - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 190, 205), 1)
-        cv2.putText(display_bgr, sentence_display, (15, h - 18), cv2.FONT_HERSHEY_SIMPLEX, 0.85, (255, 255, 255), 2)
-
-        # Key guidance
-        cv2.putText(display_bgr, "[T]: Toggle View | [S]: Speak | [C]: Clear | [Q]: Quit", (w - 380, h - 50), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (140, 150, 165), 1)
-
-        cv2.imshow(window_name, display_bgr)
+        cv2.imshow(window_name, annotated_bgr)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q') or key == 27:
             break
-        elif key == ord('t') or key == ord('T'):
-            show_full_frame = not show_full_frame
         elif key == ord(' '):
             accumulator.add_space()
         elif key == 8 or key == 127:

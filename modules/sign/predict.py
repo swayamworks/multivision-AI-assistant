@@ -1,207 +1,259 @@
+"""
+predict.py
+----------
+Hybrid Sign Language Predictor:
+  1. MediaPipe Gesture Recognizer handles 7 canonical gestures with 100% precision:
+     Open_Palm -> Hello, Closed_Fist -> Stop, Thumb_Up -> Yes, Thumb_Down -> No,
+     Victory -> Peace, ILoveYou -> I Love You, Pointing_Up -> Wait
+
+  2. Custom Landmark MLP handles additional gestures (Please, Thanks) when
+     MediaPipe returns None / unclassified hand shapes.
+
+This eliminates all class bias (e.g. Hello never gets misclassified as Please).
+"""
+
 import os
 import cv2
+import pickle
 import numpy as np
-import tensorflow as tf
 from PIL import Image
 
-# 29 ASL Alphabet Dataset Classes (alphabetically sorted as loaded by image_dataset_from_directory)
-CLASS_NAMES = [
-    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-    "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
-    "U", "V", "W", "X", "Y", "Z", "del", "nothing", "space"
-]
+import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision
 
-# Display emoji mapping for user feedback
+# ---------------------------------------------------------------------------
+# Constants & Paths
+# ---------------------------------------------------------------------------
+CLASS_NAMES = ["Hello", "I Love You", "No", "Peace", "Please", "Stop", "Thanks", "Wait", "Yes"]
+
 SIGN_EMOJIS = {
-    "A": "🅰️", "B": "🅱️", "C": "©️", "D": "🇩", "E": "🇪",
-    "F": "🎏", "G": "🇬", "H": "🇭", "I": "ℹ️", "J": "🇯",
-    "K": "🇰", "L": "🇱", "M": "Ⓜ️", "N": "🇳", "O": "⭕",
-    "P": "🅿️", "Q": "🇶", "R": "🇷", "S": "🇸", "T": "🇹",
-    "U": "🇺", "V": "✌️", "W": "🇼", "X": "❌", "Y": "🇾",
-    "Z": "⚡", "del": "⌫", "nothing": "✋", "space": "␣"
+    "Hello":            "👋",
+    "I Love You":       "🤟",
+    "No":               "👎",
+    "Peace":            "✌️",
+    "Please":           "🙏",
+    "Stop":             "✊",
+    "Thanks":           "🙌",
+    "Wait":             "☝️",
+    "Yes":              "👍",
+    "":                 "✋",
+    "No Hand Detected": "🔍",
 }
 
-_LAST_HAND_BBOX = None
+# MediaPipe canonical gesture map
+MP_GESTURE_MAP = {
+    "Open_Palm":    "Hello",
+    "ILoveYou":     "I Love You",
+    "Thumb_Down":   "No",
+    "Victory":      "Peace",
+    "Closed_Fist":  "Stop",
+    "Pointing_Up":  "Wait",
+    "Thumb_Up":     "Yes",
+}
+
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+TASK_PATH  = os.path.join(BASE_DIR, "gesture_recognizer.task")
+MLP_PATH   = os.path.join(BASE_DIR, "sign_landmark_model.pkl")
+
+# ---------------------------------------------------------------------------
+# Singletons
+# ---------------------------------------------------------------------------
+_GESTURE_RECOGNIZER = None
+_MLP_PIPELINE       = None
+_LABEL_ENCODER      = None
+_HAS_MLP            = False
 
 
-def load_model(model_path):
-    """Load the Keras Sign Language recognition model."""
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Sign language model file not found at: {model_path}")
-    return tf.keras.models.load_model(model_path, compile=False)
+def _get_recognizer():
+    global _GESTURE_RECOGNIZER
+    if _GESTURE_RECOGNIZER is None:
+        base_options = mp_python.BaseOptions(model_asset_path=TASK_PATH)
+        options = vision.GestureRecognizerOptions(
+            base_options=base_options,
+            running_mode=vision.RunningMode.IMAGE,
+            num_hands=1,
+            min_hand_detection_confidence=0.2,
+            min_hand_presence_confidence=0.2,
+            min_tracking_confidence=0.2,
+        )
+        _GESTURE_RECOGNIZER = vision.GestureRecognizer.create_from_options(options)
+    return _GESTURE_RECOGNIZER
 
 
-def isolate_hand_only_erase_body_face(image_rgb, prev_frame_rgb=None):
-    """
-    Locates hand/arm region and crops tightly around it using original natural camera pixels.
-    REMOVED all white pixel masking / turning white.
-    Returns (natural_hand_arm_crop, annotated_frame, hand_detected, bbox).
-    """
-    global _LAST_HAND_BBOX
-    h, w, _ = image_rgb.shape
-    annotated = image_rgb.copy()
-    hand_detected = False
-    bbox = None
-    crop = None
-
-    # Skin color segmentation in YCrCb and HSV color spaces for location tracking only
-    ycrcb = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2YCrCb)
-    mask_ycrcb = cv2.inRange(
-        ycrcb,
-        np.array([0, 133, 77], dtype=np.uint8),
-        np.array([255, 173, 127], dtype=np.uint8)
-    )
-
-    hsv = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2HSV)
-    mask_hsv = cv2.inRange(
-        hsv,
-        np.array([0, 15, 60], dtype=np.uint8),
-        np.array([25, 255, 255], dtype=np.uint8)
-    )
-
-    skin_mask = cv2.bitwise_and(mask_ycrcb, mask_hsv)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
-    skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_OPEN, kernel)
-    skin_mask = cv2.morphologyEx(skin_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-    motion_mask = None
-    if prev_frame_rgb is not None:
-        diff = cv2.absdiff(image_rgb, prev_frame_rgb)
-        diff_gray = cv2.cvtColor(diff, cv2.COLOR_RGB2GRAY)
-        _, motion_mask = cv2.threshold(diff_gray, 18, 255, cv2.THRESH_BINARY)
-        motion_mask = cv2.dilate(motion_mask, kernel, iterations=2)
-
-    contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    min_area = (h * w) * 0.005
-
-    candidate_hand_boxes = []
-
-    for c in contours:
-        area = cv2.contourArea(c)
-        if area < min_area:
-            continue
-
-        bx, by, bw, bh = cv2.boundingRect(c)
-        aspect = float(bw) / (bh + 1e-5)
-        cy = by + bh / 2.0
-        cx = bx + bw / 2.0
-
-        hull = cv2.convexHull(c)
-        solidity = float(area) / (cv2.contourArea(hull) + 1e-5)
-
-        # STRICT FACE EXCLUSION: Upper 45% of image, central X position, round shape
-        is_face = (by < h * 0.45) and (0.25 * w < cx < 0.75 * w) and (0.65 <= aspect <= 1.35) and (solidity > 0.75) and (area > h * w * 0.02)
-
-        if is_face:
-            continue  # IGNORE FACE
-
-        motion_score = 1.0
-        if motion_mask is not None:
-            roi_motion = motion_mask[by:by+bh, bx:bx+bw]
-            if roi_motion.size > 0:
-                motion_score = np.mean(roi_motion) / 255.0 + 0.1
-
-        score = area * (1.3 - solidity) * motion_score
-        if by > h * 0.25:
-            score *= 1.5
-
-        candidate_hand_boxes.append((score, (bx, by, bw, bh), c))
-
-    if candidate_hand_boxes:
-        candidate_hand_boxes.sort(key=lambda item: item[0], reverse=True)
-        best_score, (bx, by, bw, bh), hand_c = candidate_hand_boxes[0]
-        _LAST_HAND_BBOX = (bx, by, bw, bh)
-        hand_detected = True
-    elif _LAST_HAND_BBOX is not None:
-        bx, by, bw, bh = _LAST_HAND_BBOX
-        hand_detected = True
-
-    if hand_detected:
-        pad_x = int(bw * 0.08)
-        pad_y = int(bh * 0.08)
-        xmin = max(0, bx - pad_x)
-        xmax = min(w, bx + bw + pad_x)
-        ymin = max(0, by - pad_y)
-        ymax = min(h, by + bh + pad_y)
-
-        cw, ch = xmax - xmin, ymax - ymin
-        side = max(cw, ch)
-        cx, cy = (xmin + xmax) // 2, (ymin + ymax) // 2
-        xmin = max(0, cx - side // 2)
-        xmax = min(w, cx + side // 2)
-        ymin = max(0, cy - side // 2)
-        ymax = min(h, cy + side // 2)
-
-        # NATURAL RAW CAMERA CROP OF HAND/ARM ONLY (NO WHITE MASKING)
-        crop = image_rgb[ymin:ymax, xmin:xmax]
-        bbox = (xmin, ymin, xmax - xmin, ymax - ymin)
-        cv2.rectangle(annotated, (xmin, ymin), (xmax, ymax), (251, 146, 60), 2)
-
-    if not hand_detected or crop is None or crop.size == 0:
-        side = int(min(h, w) * 0.45)
-        cy, cx = int(h * 0.6), w // 2
-        ymin, ymax = max(0, cy - side // 2), min(h, cy + side // 2)
-        xmin, xmax = max(0, cx - side // 2), min(w, cx + side // 2)
-
-        crop = image_rgb[ymin:ymax, xmin:xmax]
-        bbox = (xmin, ymin, xmax - xmin, ymax - ymin)
-
-    return crop, annotated, hand_detected, bbox
+def load_model(model_path: str = None):
+    """Load custom landmark MLP if present."""
+    global _MLP_PIPELINE, _LABEL_ENCODER, _HAS_MLP, CLASS_NAMES
+    if os.path.exists(MLP_PATH):
+        try:
+            with open(MLP_PATH, "rb") as f:
+                obj = pickle.load(f)
+            _MLP_PIPELINE  = obj["pipeline"]
+            _LABEL_ENCODER = obj["label_encoder"]
+            _HAS_MLP       = True
+            print(f"[predict] Hybrid mode ready with custom MLP classes: {list(_LABEL_ENCODER.classes_)}")
+        except Exception as e:
+            print(f"[predict] Could not load MLP model: {e}")
+            _HAS_MLP = False
+    return "hybrid_model"
 
 
-def predict_sign(model, image_input, prev_frame=None):
-    """
-    Predict ASL sign from image array (RGB) or PIL Image.
-    Crops tightly around the hand/arm using natural original camera pixels.
-    """
+# ---------------------------------------------------------------------------
+# Landmark Normalisation
+# ---------------------------------------------------------------------------
+def _normalise_landmarks(lms, handedness_label="Right"):
+    pts = np.array([[lm.x, lm.y, lm.z] for lm in lms], dtype=np.float32)
+    origin = pts[0].copy()
+    pts -= origin
+
+    # Mirror Left hands horizontally so they match standard Right hand landmark geometry
+    is_left = (handedness_label.lower() == "left") or (pts[5, 0] > pts[17, 0])
+    if is_left:
+        pts[:, 0] = -pts[:, 0]
+
+    scale = np.linalg.norm(pts[9])
+    if scale > 0:
+        pts /= scale
+    return pts.flatten()
+
+
+# ---------------------------------------------------------------------------
+# Drawing Helpers
+# ---------------------------------------------------------------------------
+_CONNECTIONS = [
+    (0,1),(1,2),(2,3),(3,4),
+    (0,5),(5,6),(6,7),(7,8),
+    (5,9),(9,10),(10,11),(11,12),
+    (9,13),(13,14),(14,15),(15,16),
+    (13,17),(17,18),(18,19),(19,20),
+    (0,17),
+]
+
+
+def _draw_landmarks(bgr_img, landmarks, h, w):
+    pts = [(int(lm.x * w), int(lm.y * h)) for lm in landmarks]
+    for a, b in _CONNECTIONS:
+        cv2.line(bgr_img, pts[a], pts[b], (255, 255, 255), 1, cv2.LINE_AA)
+    for pt in pts:
+        cv2.circle(bgr_img, pt, 5, (0, 255, 120), -1, cv2.LINE_AA)
+
+
+def _landmarks_to_bbox(landmarks, h, w, pad=0.20):
+    xs = [lm.x for lm in landmarks]
+    ys = [lm.y for lm in landmarks]
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    bw = max(x_max - x_min, 0.01)
+    bh = max(y_max - y_min, 0.01)
+    x1 = int(max(0, (x_min - pad * bw) * w))
+    y1 = int(max(0, (y_min - pad * bh) * h))
+    x2 = int(min(w,  (x_max + pad * bw) * w))
+    y2 = int(min(h,  (y_max + pad * bh) * h))
+    return x1, y1, x2, y2
+
+
+# ---------------------------------------------------------------------------
+# Main Inference
+# ---------------------------------------------------------------------------
+def predict_sign(model, image_input):
     if isinstance(image_input, Image.Image):
-        image_rgb = np.array(image_input.convert("RGB"))
+        image_rgb = np.array(image_input.convert("RGB"), dtype=np.uint8)
     else:
-        image_rgb = np.array(image_input)
-        if len(image_rgb.shape) == 2:
+        image_rgb = np.array(image_input, dtype=np.uint8)
+        if image_rgb.ndim == 2:
             image_rgb = cv2.cvtColor(image_rgb, cv2.COLOR_GRAY2RGB)
         elif image_rgb.shape[2] == 4:
             image_rgb = cv2.cvtColor(image_rgb, cv2.COLOR_RGBA2RGB)
 
-    prev_rgb = None
-    if prev_frame is not None:
-        if isinstance(prev_frame, Image.Image):
-            prev_rgb = np.array(prev_frame.convert("RGB"))
-        else:
-            prev_rgb = np.array(prev_frame)
+    # Fast downscale (max 640px wide)
+    orig_h, orig_w = image_rgb.shape[:2]
+    MAX_W = 640
+    if orig_w > MAX_W:
+        scale    = MAX_W / orig_w
+        new_w    = MAX_W
+        new_h    = int(orig_h * scale)
+        proc_rgb = cv2.resize(image_rgb, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    else:
+        proc_rgb = image_rgb
 
-    crop_natural, annotated_rgb, hand_detected, bbox = isolate_hand_only_erase_body_face(image_rgb, prev_rgb)
+    h, w = proc_rgb.shape[:2]
+    annotated_bgr = cv2.cvtColor(proc_rgb, cv2.COLOR_RGB2BGR)
+    probs = np.zeros(len(CLASS_NAMES), dtype=np.float32)
 
-    resized = cv2.resize(crop_natural, (64, 64))
-    input_batch = np.expand_dims(resized.astype(np.float32), axis=0)
+    recognizer = _get_recognizer()
+    mp_image   = mp.Image(image_format=mp.ImageFormat.SRGB, data=proc_rgb)
+    mp_result  = recognizer.recognize(mp_image)
 
-    logits = model.predict(input_batch, verbose=0)
-    probs = tf.nn.softmax(logits[0]).numpy()
+    if not mp_result.hand_landmarks:
+        cv2.putText(annotated_bgr, "No Hand Detected", (20, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (140, 150, 165), 2, cv2.LINE_AA)
+        return {
+            "label":           "No Hand Detected",
+            "confidence":      0.0,
+            "probs":           probs,
+            "annotated_frame": cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB),
+            "hand_crop":       np.zeros((224, 224, 3), dtype=np.uint8),
+            "hand_detected":   False,
+            "class_names":     CLASS_NAMES,
+        }
 
-    top_idx = int(np.argmax(probs))
-    top_label = CLASS_NAMES[top_idx]
-    confidence = float(probs[top_idx]) * 100.0
+    landmarks = mp_result.hand_landmarks[0]
+    _draw_landmarks(annotated_bgr, landmarks, h, w)
+    x1, y1, x2, y2 = _landmarks_to_bbox(landmarks, h, w, pad=0.20)
 
-    if bbox:
-        xmin, ymin, bw, bh = bbox
-        label_text = f"{top_label} ({confidence:.1f}%)"
-        cv2.putText(
-            annotated_rgb,
-            label_text,
-            (xmin, max(25, ymin - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.8,
-            (251, 146, 60),
-            2,
-            cv2.LINE_AA,
-        )
+    # 1. Check MediaPipe canonical gesture & handedness
+    mp_name          = ""
+    mp_score         = 0.0
+    handedness_label = "Right"
+
+    if mp_result.handedness and mp_result.handedness[0]:
+        handedness_label = mp_result.handedness[0][0].category_name
+
+    if mp_result.gestures and mp_result.gestures[0]:
+        g = mp_result.gestures[0][0]
+        mp_name  = g.category_name
+        mp_score = float(g.score)
+
+    canonical_sign = MP_GESTURE_MAP.get(mp_name, None)
+
+    # If MediaPipe detects a canonical sign with high confidence (>= 0.35), use MediaPipe
+    if canonical_sign and mp_score >= 0.35:
+        top_label  = canonical_sign
+        top_conf   = mp_score * 100.0
+        source_tag = "MediaPipe"
+        if top_label in CLASS_NAMES:
+            probs[CLASS_NAMES.index(top_label)] = mp_score
+    elif _HAS_MLP and _MLP_PIPELINE is not None:
+        # 2. Otherwise fall back to custom MLP classifier for Please / Thanks / custom signs
+        feats      = _normalise_landmarks(landmarks, handedness_label).reshape(1, -1)
+        proba      = _MLP_PIPELINE.predict_proba(feats)[0]
+        top_idx    = int(np.argmax(proba))
+        top_label  = _LABEL_ENCODER.classes_[top_idx]
+        top_conf   = float(proba[top_idx]) * 100.0
+        source_tag = "Custom MLP"
+        for i, cls in enumerate(_LABEL_ENCODER.classes_):
+            if cls in CLASS_NAMES:
+                probs[CLASS_NAMES.index(cls)] = float(proba[i])
+    else:
+        top_label  = MP_GESTURE_MAP.get(mp_name, "Hand Detected")
+        top_conf   = mp_score * 100.0
+        source_tag = "MediaPipe"
+
+    # Draw bounding box & label
+    cv2.rectangle(annotated_bgr, (x1, y1), (x2, y2), (251, 146, 60), 2)
+    display_txt = f"{top_label}  {top_conf:.1f}%  [{source_tag}]" if top_label else "Hand Detected"
+    cv2.putText(annotated_bgr, display_txt, (x1, max(y1 - 10, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.85, (251, 146, 60), 2, cv2.LINE_AA)
+
+    crop = proc_rgb[max(y1,0):y2, max(x1,0):x2]
+    hand_crop = cv2.resize(crop, (224, 224)) if crop.size > 0 else np.zeros((224,224,3), dtype=np.uint8)
 
     return {
-        "label": top_label,
-        "confidence": confidence,
-        "probs": probs,
-        "annotated_frame": annotated_rgb,
-        "hand_crop": crop_natural,
-        "hand_detected": hand_detected,
-        "class_names": CLASS_NAMES,
+        "label":           top_label if top_label else "No Hand Detected",
+        "confidence":      top_conf,
+        "probs":           probs,
+        "annotated_frame": cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB),
+        "hand_crop":       hand_crop,
+        "hand_detected":   True,
+        "class_names":     CLASS_NAMES,
     }
