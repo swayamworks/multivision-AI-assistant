@@ -248,19 +248,19 @@ def render_realtime_mode(model):
         or "STREAMLIT_SERVER_GATHER_USAGE_STATS" in os.environ
     )
 
-    if not IS_CLOUD:
-        col_launch, col_stream_opt = st.columns([1.2, 1], gap="large")
-        with col_launch:
+    col_launch, col_stream_opt = st.columns([1.2, 1], gap="large")
+
+    with col_launch:
+        if not IS_CLOUD:
             if st.button("🚀 Launch Dedicated 30 FPS Real-Time Window", type="primary", use_container_width=True):
                 python_exe = sys.executable
                 subprocess.Popen([python_exe, REALTIME_SCRIPT], cwd=os.path.dirname(REALTIME_SCRIPT))
                 st.success("🟢 Real-Time Camera Window launched! Look at your desktop/taskbar for the MultiVision AI live window.")
+        else:
+            st.info("☁️ **Streamlit Cloud Mode**: Real-Time WebRTC Camera Stream & File Assistants active.")
 
-        with col_stream_opt:
-            stream_option = st.radio("Camera Mode", ["📸 Streamlit Camera (100% Cloud Working)", "⚡ Native OpenCV Loop (Local)", "🌐 WebRTC Stream"], index=0, horizontal=True)
-    else:
-        st.info("☁️ **Running on Streamlit Cloud**: Streamlit Camera & File Assistants are active.")
-        stream_option = st.radio("Camera Mode", ["📸 Streamlit Camera (100% Cloud Working)", "🌐 WebRTC Stream (Experimental)"], index=0, horizontal=True)
+    with col_stream_opt:
+        stream_option = st.radio("Camera Stream Mode", ["🌐 WebRTC Real-Time Live Stream", "⚡ Native OpenCV Loop (Local Desktop Only)", "📸 Snapshot Capture"], index=0, horizontal=True)
 
     st.markdown("---")
 
@@ -303,7 +303,43 @@ def render_realtime_mode(model):
             render_audio_player(current_sentence, key_suffix="live_audio")
 
     with col_cam:
-        if "📸 Streamlit Camera" in stream_option:
+        if "🌐 WebRTC Real-Time Live Stream" in stream_option:
+            st.markdown("##### 📹 Live Real-Time WebRTC Stream")
+            ctx = webrtc_streamer(
+                key="sign-webrtc-stream",
+                mode=WebRtcMode.SENDRECV,
+                rtc_configuration=RTCConfiguration(
+                    {
+                        "iceServers": [
+                            {"urls": ["stun:stun.l.google.com:19302"]},
+                            {"urls": ["stun:stun1.l.google.com:19302"]},
+                            {"urls": ["stun:stun2.l.google.com:19302"]},
+                            {"urls": ["stun:stun3.l.google.com:19302"]},
+                            {"urls": ["stun:stun4.l.google.com:19302"]},
+                            {
+                                "urls": [
+                                    "turn:openrelay.metered.ca:80",
+                                    "turn:openrelay.metered.ca:443",
+                                    "turn:openrelay.metered.ca:443?transport=tcp",
+                                ],
+                                "username": "openrelay",
+                                "credential": "openrelay",
+                            },
+                        ]
+                    }
+                ),
+                video_processor_factory=lambda: SignVideoProcessor(model),
+                media_stream_constraints={"video": True, "audio": False},
+                async_processing=True,
+            )
+
+            if ctx.video_processor:
+                st.caption(f"Latest Sign: **{ctx.video_processor.latest_label}** ({ctx.video_processor.latest_confidence:.1f}%)")
+                live_text = ctx.video_processor.accumulator.get_text()
+                if live_text:
+                    st.session_state.sign_sentence = live_text
+
+        elif "📸 Snapshot Capture" in stream_option:
             st.markdown("##### 📸 Live Camera Capture")
             cam_file = st.camera_input("Capture your sign gesture")
             if cam_file is not None:
@@ -376,37 +412,6 @@ def render_realtime_mode(model):
                 except Exception as ex:
                     st.warning(f"⚠️ Native OpenCV stream unavailable: {ex}.")
                     st.session_state.is_streaming = False
-
-        else:
-            ctx = webrtc_streamer(
-                key="sign-webrtc-stream",
-                mode=WebRtcMode.SENDRECV,
-                rtc_configuration=RTCConfiguration(
-                    {
-                        "iceServers": [
-                            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun2.l.google.com:19302"]},
-                            {
-                                "urls": [
-                                    "turn:openrelay.metered.ca:80",
-                                    "turn:openrelay.metered.ca:443",
-                                    "turn:openrelay.metered.ca:443?transport=tcp",
-                                ],
-                                "username": "openrelay",
-                                "credential": "openrelay",
-                            },
-                        ]
-                    }
-                ),
-                video_processor_factory=lambda: SignVideoProcessor(model),
-                media_stream_constraints={"video": True, "audio": False},
-                async_processing=True,
-            )
-
-            if ctx.video_processor:
-                st.caption(f"Latest Sign: **{ctx.video_processor.latest_label}** ({ctx.video_processor.latest_confidence:.1f}%)")
-                live_text = ctx.video_processor.accumulator.get_text()
-                if live_text:
-                    st.session_state.sign_sentence = live_text
 
 
 def render_page():
