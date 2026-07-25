@@ -1,9 +1,9 @@
 services:
   - type: web
     name: multivision-ai-assistant
-    env: docker
-    plan: free
-    dockerfilePath: Dockerfile
+    env: python
+    buildCommand: apt-get update && apt-get install -y ffmpeg libgl1-mesa-glx libglib2.0-0 && pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
-      - key: PORT
-        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.10.12
