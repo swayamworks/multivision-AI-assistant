@@ -70,6 +70,9 @@ def main():
     elif page == "Sign Language":
         from modules.sign.page import render_page
         render_page()
+    elif page == "Drowsiness & Age":
+        from modules.drowsiness.page import render_page
+        render_page()
     else:
         details = next(item for item in MODULES if item[1] == page)
         st.markdown(f'<div class="page-hero"><div class="page-icon">{details[0]}</div><div class="page-title">{page}</div><div class="page-desc">This module is currently being prepared for your workspace.</div></div>', unsafe_allow_html=True)
