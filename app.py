@@ -1,6 +1,10 @@
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
+os.environ['TF_NUM_INTEROP_THREADS'] = '1'
 import streamlit as st
 
 from ui_components import (ACCENT_COLORS, inject_global_css, render_footer,
