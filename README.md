@@ -90,8 +90,8 @@ To fulfill the internship requirements, this repository builds upon the foundati
 This project represents the culmination of a rigorous training and internship track focused on practical AI deployment, computer vision pipelines, and full-stack integration. 
 
 * **Domain:** AI & Computer Vision
-* **Contact:** [Your Email]
-* **GitHub:** [Your Profile Link]
+* **Contact:** [swayam2464@gmail.com](mailto:swayam2464@gmail.com)
+* **GitHub:** [github.com/swayamworks](https://github.com/swayamworks)
 
 ---
 <div align="center">
