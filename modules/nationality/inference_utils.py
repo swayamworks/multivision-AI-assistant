@@ -124,7 +124,7 @@ class ProductionDeepFaceBundle_v2:
         from deepface import DeepFace
         try:
             # DeepFace expects BGR image array directly when enforce_detection=False
-            res = DeepFace.analyze(img_path=image_bgr, actions=['race', 'age', 'emotion'], enforce_detection=False)
+            res = DeepFace.analyze(img_path=image_bgr, actions=['race', 'age', 'emotion'], enforce_detection=False, detector_backend="skip")
             if isinstance(res, list):
                 res = res[0]
                 
