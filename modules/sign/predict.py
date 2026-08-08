@@ -170,9 +170,9 @@ def predict_sign(model, image_input):
         elif image_rgb.shape[2] == 4:
             image_rgb = cv2.cvtColor(image_rgb, cv2.COLOR_RGBA2RGB)
 
-    # Fast downscale (max 640px wide)
+    # Fast downscale (max 1280px wide for better quality)
     orig_h, orig_w = image_rgb.shape[:2]
-    MAX_W = 640
+    MAX_W = 1280
     if orig_w > MAX_W:
         scale    = MAX_W / orig_w
         new_w    = MAX_W
@@ -190,8 +190,8 @@ def predict_sign(model, image_input):
     mp_result  = recognizer.recognize(mp_image)
 
     if not mp_result.hand_landmarks:
-        cv2.putText(annotated_bgr, "No Hand Detected", (20, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (140, 150, 165), 2, cv2.LINE_AA)
+        cv2.putText(annotated_bgr, "No Hand Detected", (20, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.8, (140, 150, 165), 4, cv2.LINE_AA)
         return {
             "label":           "No Hand Detected",
             "confidence":      0.0,
@@ -239,28 +239,24 @@ def predict_sign(model, image_input):
     if canonical_sign and mp_score >= 0.45:
         top_label  = canonical_sign
         top_conf   = mp_score * 100.0
-        source_tag = "MediaPipe"
         if top_label in CLASS_NAMES:
             probs[CLASS_NAMES.index(top_label)] = mp_score
     elif mlp_label in ["Please", "Thanks"] and mlp_conf >= 45.0:
         # 2. Custom MLP handles Please and Thanks when MediaPipe score is lower
         top_label  = mlp_label
         top_conf   = mlp_conf
-        source_tag = "Custom MLP"
     elif mlp_label is not None:
         top_label  = mlp_label
         top_conf   = mlp_conf
-        source_tag = "Custom MLP"
     else:
         top_label  = MP_GESTURE_MAP.get(mp_name, "Hand Detected")
         top_conf   = mp_score * 100.0
-        source_tag = "MediaPipe"
 
     # Draw bounding box & label
-    cv2.rectangle(annotated_bgr, (x1, y1), (x2, y2), (251, 146, 60), 2)
-    display_txt = f"{top_label}  {top_conf:.1f}%  [{source_tag}]" if top_label else "Hand Detected"
-    cv2.putText(annotated_bgr, display_txt, (x1, max(y1 - 10, 20)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.85, (251, 146, 60), 2, cv2.LINE_AA)
+    cv2.rectangle(annotated_bgr, (x1, y1), (x2, y2), (251, 146, 60), 3)
+    display_txt = f"{top_label}  {top_conf:.1f}%" if top_label else "Hand Detected"
+    cv2.putText(annotated_bgr, display_txt, (x1, max(y1 - 15, 30)),
+                cv2.FONT_HERSHEY_SIMPLEX, 1.4, (251, 146, 60), 3, cv2.LINE_AA)
 
     crop = proc_rgb[max(y1,0):y2, max(x1,0):x2]
     hand_crop = cv2.resize(crop, (224, 224)) if crop.size > 0 else np.zeros((224,224,3), dtype=np.uint8)

@@ -20,6 +20,8 @@ class SequenceAccumulator:
         """Update buffer with frame prediction. Returns True if text changed."""
         INVALID_LABELS = {"Hand Detected", "No Hand Detected", "", "nothing", None}
         if not sign_label or sign_label in INVALID_LABELS:
+            self.recent_predictions.clear()
+            self.last_added_sign = None
             return False
 
         if confidence < self.min_confidence:
@@ -29,13 +31,17 @@ class SequenceAccumulator:
         if len(self.recent_predictions) > self.debounce_frames:
             self.recent_predictions.pop(0)
 
-        # Check if all recent predictions match
-        if len(self.recent_predictions) == self.debounce_frames and len(set(self.recent_predictions)) == 1:
-            stable_sign = self.recent_predictions[0]
-
-            if stable_sign != self.last_added_sign:
-                self.last_added_sign = stable_sign
-                return self.apply_sign(stable_sign)
+        # Allow majority vote instead of absolute consensus for robustness
+        if len(self.recent_predictions) == self.debounce_frames:
+            from collections import Counter
+            counts = Counter(self.recent_predictions)
+            most_common_sign, most_common_count = counts.most_common(1)[0]
+            
+            # Require at least N-1 matches for debouncing
+            if most_common_count >= self.debounce_frames - 1:
+                if most_common_sign != self.last_added_sign:
+                    self.last_added_sign = most_common_sign
+                    return self.apply_sign(most_common_sign)
 
         return False
 

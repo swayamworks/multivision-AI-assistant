@@ -62,7 +62,7 @@ def render_image_mode(detector):
         "Upload Image",
         type=["jpg", "jpeg", "png"],
         label_visibility="collapsed",
-        key="drowsiness_img_uploader"
+        key=f"drowsiness_img_uploader_{st.session_state.get('run_id', 0)}"
     )
     close_upload_card()
 
@@ -156,7 +156,7 @@ def render_video_mode(detector):
         "Upload Video",
         type=["mp4", "avi", "mov"],
         label_visibility="collapsed",
-        key="drowsiness_vid_uploader"
+        key=f"drowsiness_vid_uploader_{st.session_state.get('run_id', 0)}"
     )
     close_upload_card()
 

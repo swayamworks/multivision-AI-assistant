@@ -75,7 +75,7 @@ def render_image_mode(model):
         "Upload sign image",
         type=["jpg", "jpeg", "png"],
         label_visibility="collapsed",
-        key="sign_img_uploader",
+        key=f"sign_img_uploader_{st.session_state.get('run_id', 0)}",
     )
     close_upload_card()
 
@@ -144,7 +144,7 @@ def render_video_mode(model):
         "Upload video clip",
         type=["mp4", "mov", "avi"],
         label_visibility="collapsed",
-        key="sign_video_uploader",
+        key=f"sign_video_uploader_{st.session_state.get('run_id', 0)}",
     )
     close_upload_card()
 
@@ -184,6 +184,14 @@ def render_video_mode(model):
             st.markdown("")
             st.markdown("**🔊 Listen to Translated Transcript**")
             render_audio_player(transcript, key_suffix="vid_transcript")
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.download_button(
+                label="⬇️ Download Transcript (.txt)",
+                data=transcript,
+                file_name="sign_language_transcript.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
         else:
             st.warning("No continuous text sequence decoded from video frames. Try a video with clearer hand signs.")
 
@@ -237,34 +245,13 @@ def render_realtime_mode(model):
     st.markdown("##### 📹 100% Real-Time Live Camera Assistant")
     st.markdown("Zero-click 30 FPS continuous streaming — MediaPipe detects your hand, MobileNetV2 classifies the sign, with instant text-to-speech!")
 
-    st.markdown(
-        f'''<div class="result-card" style="border-color:{ACCENT};background:linear-gradient(135deg,#191e2b,#121620);margin-bottom:1.5rem">
-            <div class="result-label">🔥 Recommended 30 FPS Experience</div>
-            <div class="result-value" style="font-size:1.45rem;color:#fff">Dedicated Real-Time Camera Window</div>
-            <div style="font-size:.85rem;color:#a0aec0;margin-top:.4rem">Launches a smooth 30 FPS live desktop window with real-time HUD banner, automatic word sentence builder, and keyboard shortcuts ([SPACE], [BACKSPACE], [C] Clear, [S] Speak).</div>
-        </div>''',
-        unsafe_allow_html=True,
-    )
-
     IS_CLOUD = (
         os.path.exists("/mount/src")
         or os.environ.get("HOME") == "/home/adminuser"
         or "STREAMLIT_SERVER_GATHER_USAGE_STATS" in os.environ
     )
 
-    col_launch, col_stream_opt = st.columns([1.2, 1], gap="large")
-
-    with col_launch:
-        if not IS_CLOUD:
-            if st.button("🚀 Launch Dedicated 30 FPS Real-Time Window", type="primary", use_container_width=True):
-                python_exe = sys.executable
-                subprocess.Popen([python_exe, REALTIME_SCRIPT], cwd=os.path.dirname(REALTIME_SCRIPT))
-                st.success("🟢 Real-Time Camera Window launched! Look at your desktop/taskbar for the MultiVision AI live window.")
-        else:
-            st.info("☁️ **Streamlit Cloud Mode**: Real-Time WebRTC Camera Stream & File Assistants active.")
-
-    with col_stream_opt:
-        stream_option = st.radio("Camera Stream Mode", ["🌐 WebRTC Real-Time Live Stream", "⚡ Native OpenCV Loop (Local Desktop Only)", "📸 Snapshot Capture"], index=0, horizontal=True)
+    stream_option = st.radio("Camera Stream Mode", ["🌐 WebRTC Real-Time Live Stream", "⚡ Native OpenCV Loop (Local Desktop Only)", "📸 Snapshot Capture"], index=0, horizontal=True)
 
     st.markdown("---")
 
@@ -305,6 +292,14 @@ def render_realtime_mode(model):
 
         if current_sentence:
             render_audio_player(current_sentence, key_suffix="live_audio")
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.download_button(
+                label="⬇️ Download Live Transcript (.txt)",
+                data=current_sentence,
+                file_name="sign_language_live_transcript.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
 
     with col_cam:
         if "🌐 WebRTC Real-Time Live Stream" in stream_option:
@@ -336,7 +331,7 @@ def render_realtime_mode(model):
                     }
                 ),
                 video_processor_factory=lambda: SignVideoProcessor(model),
-                media_stream_constraints={"video": {"width": {"ideal": 640}, "height": {"ideal": 480}}, "audio": False},
+                media_stream_constraints={"video": {"width": {"ideal": 1280}, "height": {"ideal": 720}}, "audio": False},
                 video_html_attrs={
                     "style": {"width": "100%", "margin": "0 auto", "border-radius": "8px"},
                     "controls": False,
@@ -397,8 +392,8 @@ def render_realtime_mode(model):
                         st.warning(f"⚠️ **Camera Index {cam_idx} Unavailable**: Could not open local webcam.")
                         st.session_state.is_streaming = False
                     else:
-                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+                        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
                         frame_window = st.empty()
                         status_window = st.empty()
 

@@ -31,22 +31,27 @@ def render_page():
     if predictor is None:
         st.stop()
 
-    upload_card("Upload audio", "WAV", "🎤")
-    uploaded_file = st.file_uploader("Upload a WAV file", type=["wav"], label_visibility="collapsed")
+    upload_card("Upload or Record audio", "WAV", "🎤")
+    run_suffix = st.session_state.get('run_id', 0)
+    uploaded_file = st.file_uploader("Upload a WAV file", type=["wav"], label_visibility="collapsed", key=f"voice_uploader_{run_suffix}")
+    recorded_audio = st.audio_input("Record a voice message", label_visibility="collapsed", key=f"voice_recorder_{run_suffix}")
     close_upload_card()
-    if uploaded_file is None:
-        render_empty_state("🎵", "Upload an audio file to begin analysis", "WAV")
+    
+    audio_source = recorded_audio if recorded_audio else uploaded_file
+    
+    if audio_source is None:
+        render_empty_state("🎵", "Upload or record an audio file to begin analysis", "WAV")
         with st.expander("Model information"):
             render_model_info([{"label": "Gender", "value": "Random Forest"}, {"label": "Emotion", "value": "XGBoost"}, {"label": "Features", "value": "MFCC + Chroma + Mel"}, {"label": "Dataset", "value": "RAVDESS"}])
         render_footer()
         return
 
-    render_media_card("Uploaded audio")
-    st.audio(uploaded_file, format="audio/wav")
+    render_media_card("Captured audio")
+    st.audio(audio_source, format="audio/wav")
     close_media_card()
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         temp_path = tmp.name
-        tmp.write(uploaded_file.getbuffer())
+        tmp.write(audio_source.getbuffer())
 
     progress_area = st.empty()
     progress_area.markdown("<div class='status-card'><div class='status-title'>Analysis progress</div><div class='status-step'>• &nbsp; Extracting audio features...</div></div>", unsafe_allow_html=True)

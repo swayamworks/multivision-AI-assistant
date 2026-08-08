@@ -1,101 +1,99 @@
-# 👁️ MultiVision AI & Audio Intelligence Assistant
+<div align="center">
+  <h1>🧠 MultiVision AI Suite</h1>
+  <p><strong>Advanced Computer Vision & AI Workspace</strong></p>
+  <p><i>A capstone internship project demonstrating real-time machine learning deployment.</i></p>
 
-A comprehensive, modular AI suite developed in Python using Streamlit, combining cutting-edge deep learning models for various vision and audio intelligence tasks.
-
----
-
-## 📌 Project Overview
-
-This platform is a unified web application consisting of 6 distinct AI modules:
-1. **Facial Emotion Recognition:** Predicts human emotions from facial expressions using CNNs.
-2. **Animal Detection *(Upcoming)*:** Detects and classifies multiple animals using YOLO object detection.
-3. **Car Color & Person Detection *(Upcoming)*:** Identifies cars, classifies their colors via CNN, and detects people using YOLO.
-4. **Voice Emotion Recognition *(Upcoming)*:** Predicts emotions from speech using audio features.
-5. **Sign Language Recognition *(Upcoming)*:** Classifies specific ASL words using sequence modeling.
-6. **Drowsiness & Age Estimation *(Upcoming)*:** Detects sleep/fatigue via Eye Aspect Ratio (EAR) and estimates age.
+  <p>
+    <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+    <img src="https://img.shields.io/badge/TensorFlow-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white" alt="TensorFlow">
+    <img src="https://img.shields.io/badge/OpenCV-5C3EE8?style=for-the-badge&logo=opencv&logoColor=white" alt="OpenCV">
+    <img src="https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white" alt="Streamlit">
+  </p>
+</div>
 
 ---
 
-## 🗂️ Folder Structure
+## 📖 Overview
 
-The project strictly follows a scalable, modular software engineering architecture:
+This repository contains my final project submission for the **Elevance Skills Training & Internship Program**. 
 
-```
-MultiVision-AI-Assistant/
-├── app.py                     # Main Streamlit multipage entry point
-├── config.py                  # Global settings and hyperparameters
-├── requirements.txt           # Python dependencies
-├── README.md                  # Project documentation
-├── notebooks/                 # Jupyter notebooks for model training and fine-tuning
-├── reports/                   # Performance metrics, confusion matrices, and plots
-└── modules/                   # Self-contained logic for each ML task
-    ├── emotion/               # (Completed) Facial Emotion module
-    ├── animal/                # (In Progress)
-    ├── car/                   # (In Progress)
-    ├── voice/                 # (In Progress)
-    ├── sign/                  # (In Progress)
-    ├── drowsiness/            # (In Progress)
-    └── nationality/           # (In Progress)
-```
+The **MultiVision AI Suite** is a unified, offline-ready desktop application that integrates 7 distinct Machine Learning and Computer Vision models into a single, cohesive, Apple-inspired interface. It demonstrates end-to-end expertise in model inference, real-time video processing, and modern UI/UX design.
 
-Each module contains its own isolated inference (`predict.py`), UI (`page.py`), and `weights/` directory for maximum maintainability.
+### 🎯 Project Separation (Grading Criteria)
+
+To fulfill the internship requirements, this repository builds upon the foundational training project and expands it with advanced internship modules:
+
+**1. Training Project (Base Foundation)**
+*   **Facial Emotion Detection:** Real-time CNN-based facial expression analysis.
+*   **Car Colour Detection:** Vehicle tracking and color classification.
+*   **Animal Detection:** YOLOv8 object detection tailored for animals, with carnivorous highlighting.
+
+**2. Internship Expansion (Extra Features & Models)**
+*   **Sign Language Detection (HD 720p):** A hybrid MediaPipe + Custom MLP architecture with a live sequence builder, majority-voting debounce logic, and Text-to-Speech (gTTS) integration. Includes transcript exporting.
+*   **Emotion Detection (Voice):** Audio analysis for detecting sentiment from vocal files.
+*   **Drowsiness Detection:** Real-time eye aspect ratio tracking to prevent driver fatigue.
+*   **Nationality & Appearance:** Multi-attribute prediction (age, emotion, nationality) from faces.
+*   **Unified UI Engine:** A custom-built, Apple-inspired monochromatic Streamlit theme with dynamic routing, seamless CSS injection, and state preservation.
 
 ---
 
-## ⚙️ Local Setup & Installation
+## 🚀 Features
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/swayamworks/facial-emotion-recog.git
-cd facial-emotion-recog
-```
-
-### 2. Create a virtual environment
-```bash
-python -m venv venv
-
-# Activate it:
-# Windows
-venv\Scripts\activate
-# macOS/Linux
-source venv/bin/activate
-```
-
-### 3. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Run the app
-```bash
-streamlit run app.py
-```
-The app will open automatically in your browser at `http://localhost:8501`.
+*   **100% Offline Capable:** Core computer vision models run locally without requiring internet access.
+*   **Real-Time Processing:** Supports live webcam feeds (OpenCV & WebRTC) and recorded video files.
+*   **Heads-Up Display (HUD):** Custom OpenCV rendering for crisp, non-distorted bounding boxes and UI overlays.
+*   **Premium UI:** Apple-inspired monochromatic design with custom CSS components.
 
 ---
 
-## 🚀 Models Used & Datasets
+## 🛠️ Tech Stack
 
-*(This section is updated iteratively as modules are completed)*
-
-| Module | Dataset | Model Architecture | Status |
-|---|---|---|---|
-| **Facial Emotion** | RAF-DB | CNN | ✅ Complete |
-| **Animal Detection** | COCO / Animals-10 | YOLOv8 | 🔄 Pending |
-| **Car Color** | Vehicle Color Dataset | YOLOv8 + CNN | 🔄 Pending |
-| **Voice Emotion** | RAVDESS / TESS | RF + MFCC (or Wav2Vec2) | 🔄 Pending |
-| **Sign Language** | WLASL (Filtered) | MediaPipe + LSTM | 🔄 Pending |
-| **Drowsiness & Age**| MRL Eye / UTKFace | MediaPipe + DeepFace | 🔄 Pending |
+*   **Core:** Python 3
+*   **Computer Vision:** OpenCV (cv2), MediaPipe
+*   **Machine Learning:** TensorFlow, Keras, Scikit-Learn, YOLOv8 (Ultralytics)
+*   **Frontend:** Streamlit, Custom HTML/CSS
+*   **Audio/TTS:** gTTS (Google Text-to-Speech)
 
 ---
 
-## 📊 Training Process & Results
+## 📦 Installation & Setup
 
-All training notebooks can be found in the `notebooks/` directory. 
-Performance metrics, loss curves, and screenshots for each completed module are archived in the `reports/` folder.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/multivision-ai.git
+   cd multivision-ai
+   ```
+
+2. **Create a virtual environment (Recommended)**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Run the application**
+   ```bash
+   streamlit run app.py
+   ```
 
 ---
 
-## 👤 Developed by
+## 👨‍💻 About the Developer
 
-**Swayam Netke**
+**Swayam**  
+*Machine Learning Intern @ Elevance Skills*  
+
+This project represents the culmination of a rigorous training and internship track focused on practical AI deployment, computer vision pipelines, and full-stack integration. 
+
+* **Domain:** AI & Computer Vision
+* **Contact:** [Your Email]
+* **GitHub:** [Your Profile Link]
+
+---
+<div align="center">
+  <i>Submitted for the Elevance Skills Internship Program • 2026</i>
+</div>

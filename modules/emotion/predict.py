@@ -14,10 +14,13 @@ CLASS_NAMES = [
 ]
 
 def load_model(model_path):
-    """Loads the keras model from the given path."""
+    """Loads the TFLite model from the given path."""
     try:
-        model = tf.keras.models.load_model(model_path)
-        return model
+        interpreter = tf.lite.Interpreter(model_path=model_path)
+        interpreter.allocate_tensors()
+        # Attach dummy input_shape so page.py technical details don't break
+        interpreter.input_shape = interpreter.get_input_details()[0]['shape']
+        return interpreter
     except Exception as e:
         raise RuntimeError(f"Failed to load model: {e}")
 
@@ -38,12 +41,17 @@ def preprocess_image(image: Image.Image, model):
 
 def predict_emotion(model, image):
     """
-    Predicts the emotion of a preprocessed image.
+    Predicts the emotion of a preprocessed image using TFLite.
     Returns (emotion_label, confidence_percentage, full_prediction_array).
     """
-    prediction = model.predict(image, verbose=0)[0]
+    input_details = model.get_input_details()
+    output_details = model.get_output_details()
+    
+    model.set_tensor(input_details[0]['index'], image)
+    model.invoke()
+    prediction = model.get_tensor(output_details[0]['index'])[0]
+    
     idx = np.argmax(prediction)
-
     emotion = CLASS_NAMES[idx]
     confidence = float(prediction[idx]) * 100
 

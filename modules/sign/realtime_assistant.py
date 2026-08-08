@@ -62,7 +62,8 @@ def run_realtime_assistant():
     print("Model loaded successfully!")
     print("Starting webcam video capture...")
 
-    cap = cv2.VideoCapture(0)
+    backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+    cap = cv2.VideoCapture(0, backend)
     if not cap.isOpened():
         print("ERROR: Could not open local webcam.")
         return
@@ -83,6 +84,15 @@ def run_realtime_assistant():
         if not ret:
             break
 
+        # High-quality aspect-ratio-preserving upscale if camera natively captured lower resolution
+        if frame_bgr.shape[1] < 1280:
+            h, w = frame_bgr.shape[:2]
+            scale = 1280.0 / w
+            new_h = int(h * scale)
+            frame_bgr = cv2.resize(frame_bgr, (1280, new_h), interpolation=cv2.INTER_CUBIC)
+            
+        cv2.resizeWindow(window_name, frame_bgr.shape[1], frame_bgr.shape[0])
+
         frame_bgr = cv2.flip(frame_bgr, 1)
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
@@ -97,6 +107,26 @@ def run_realtime_assistant():
 
         if changed and label not in ["nothing", "No Hand Detected"]:
             print(f"▶ Detected Sign: {label} ({conf:.1f}%) | Sentence: {current_sentence}")
+
+        # --- Draw HUD Banner ---
+        h, w = annotated_bgr.shape[:2]
+        banner_h = 140
+        
+        # Draw solid dark banner background at bottom
+        cv2.rectangle(annotated_bgr, (0, h - banner_h), (w, h), (20, 20, 20), -1)
+        
+        # Top banner separator line
+        cv2.line(annotated_bgr, (0, h - banner_h), (w, h - banner_h), (200, 200, 200), 2)
+        
+        # Display Current Sentence
+        display_text = current_sentence if current_sentence else "Waiting for signs..."
+        cv2.putText(annotated_bgr, f"Sentence: {display_text}", (30, h - 80),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3, cv2.LINE_AA)
+        
+        # Display Shortcuts
+        shortcuts = "Shortcuts: [SPACE] Add Space | [BACKSPACE] Delete Word | [C] Clear | [S] Speak | [Q] Quit"
+        cv2.putText(annotated_bgr, shortcuts, (30, h - 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 2, cv2.LINE_AA)
 
         cv2.imshow(window_name, annotated_bgr)
 
