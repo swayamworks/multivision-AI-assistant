@@ -53,8 +53,7 @@ def _preprocess_face(image_bgr, face_box):
 class DiagnosticBaselineBundle_v1:
     """
     V1 Baseline: Custom transfer-learned MobileNetV2 + RAF-DB CNN.
-    Preserved for diagnostic and documentation purposes to demonstrate the 
-    class imbalance issue (mode collapse) that motivated the V2 pivot.
+    Now using TFLite for emotion to minimize memory footprint on Streamlit Cloud.
     """
 
     def __init__(self, age_ethnicity_path, emotion_path):
@@ -62,16 +61,19 @@ class DiagnosticBaselineBundle_v1:
         if not os.path.exists(age_ethnicity_path):
             raise FileNotFoundError(
                 f"Age/ethnicity model not found at '{age_ethnicity_path}'. "
-                f"Train it first with: python train_age_ethnicity.py --data_dir <path>"
             )
         if not os.path.exists(emotion_path):
             raise FileNotFoundError(
                 f"Emotion model not found at '{emotion_path}'. "
-                f"Train it first with: python train_emotion.py --data_dir <path> "
-                f"or copy your existing RAF-DB model here."
             )
         self.age_ethnicity_model = tf.keras.models.load_model(age_ethnicity_path, compile=False)
-        self.emotion_model = tf.keras.models.load_model(emotion_path, compile=False)
+        
+        # Load Emotion TFLite Model
+        self.emotion_interpreter = tf.lite.Interpreter(model_path=emotion_path)
+        self.emotion_interpreter.allocate_tensors()
+        self.emo_input_details = self.emotion_interpreter.get_input_details()
+        self.emo_output_details = self.emotion_interpreter.get_output_details()
+        self.emo_input_shape = self.emo_input_details[0]['shape']
 
     def predict(self, image_bgr, face_box):
         face_input = _preprocess_face(image_bgr, face_box)
@@ -82,21 +84,23 @@ class DiagnosticBaselineBundle_v1:
         race_name = RACE_NAMES[race_idx]
         race_confidence = float(race_pred[0][race_idx])
 
-        # Emotion model uses /255.0 normalization, not MobileNetV2 preprocess_input
+        # Emotion model TFLite inference
         x, y, w, h = face_box
         img_h, img_w = image_bgr.shape[:2]
         x1, y1 = max(0, x), max(0, y)
         x2, y2 = min(img_w, x + w), min(img_h, y + h)
         face_crop = image_bgr[y1:y2, x1:x2]
         face_rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
-        # Resize to whatever the emotion model expects
-        emo_input_shape = self.emotion_model.input_shape
-        emo_h, emo_w = emo_input_shape[1], emo_input_shape[2]
+        
+        emo_h, emo_w = self.emo_input_shape[1], self.emo_input_shape[2]
         face_resized = cv2.resize(face_rgb, (emo_w, emo_h))
         face_norm = face_resized.astype(np.float32) / 255.0
         face_batch = np.expand_dims(face_norm, axis=0)
 
-        emotion_pred = self.emotion_model.predict(face_batch, verbose=0)
+        self.emotion_interpreter.set_tensor(self.emo_input_details[0]['index'], face_batch)
+        self.emotion_interpreter.invoke()
+        emotion_pred = self.emotion_interpreter.get_tensor(self.emo_output_details[0]['index'])
+        
         emotion_idx = int(np.argmax(emotion_pred[0]))
         emotion_name = EMOTION_LABELS[emotion_idx]
         emotion_confidence = float(emotion_pred[0][emotion_idx])

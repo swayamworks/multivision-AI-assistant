@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 from PIL import Image, UnidentifiedImageError
 
-from modules.nationality.inference_utils import ProductionDeepFaceBundle_v2, detect_face_box
+from modules.nationality.inference_utils import DiagnosticBaselineBundle_v1, detect_face_box
 from ui_components import (
     render_hero,
     render_empty_state,
@@ -25,13 +25,13 @@ ACCENT = ACCENT_COLORS["nationality"]
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATHS = {
     "age_ethnicity": os.path.join(BASE_DIR, "models", "age_ethnicity_model.h5"),
-    "emotion": os.path.join(BASE_DIR, "..", "emotion", "weights", "emotion_cnn_baseline.keras"),
+    "emotion": os.path.join(BASE_DIR, "..", "emotion", "weights", "emotion_model.tflite"),
 }
 
 @st.cache_resource(show_spinner="Loading Nationality & Appearance models...")
 def get_bundle():
     try:
-        return ProductionDeepFaceBundle_v2()
+        return DiagnosticBaselineBundle_v1(MODEL_PATHS["age_ethnicity"], MODEL_PATHS["emotion"])
     except Exception as e:
         st.error(str(e))
         return None
