@@ -1,7 +1,0 @@
-streamlit
-tensorflow
-opencv-python
-scikit-learn
-numpy
-Pillow
-webcolors
