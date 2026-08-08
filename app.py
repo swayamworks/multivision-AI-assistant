@@ -1,3 +1,6 @@
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 import streamlit as st
 
 from ui_components import (ACCENT_COLORS, inject_global_css, render_footer,
