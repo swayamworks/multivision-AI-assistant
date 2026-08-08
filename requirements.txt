@@ -19,3 +19,4 @@ torchvision
 mtcnn
 deepface
 numba>=0.59.0
+tf-keras
