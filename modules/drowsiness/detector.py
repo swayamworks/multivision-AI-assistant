@@ -13,7 +13,6 @@ from torchvision.models import (
     mobilenet_v3_small,
 )
 from ultralytics import YOLO
-from mtcnn import MTCNN
 
 
 def _build_drowsiness_model():
@@ -63,8 +62,12 @@ class DrowsinessDetector:
         self.age_model, self.age_transform = _build_age_model()
         _load_weights(self.age_model, age_path, self.device)
         self.age_model.to(self.device).eval()
-
-        self.face_detector = MTCNN()
+        
+        self.face_detector = cv2.CascadeClassifier(
+            os.path.join(module_dir, "cascades", "haarcascade_frontalface_default.xml")
+        )
+        if self.face_detector.empty():
+            raise RuntimeError("The face-detection cascade could not be loaded.")
         print(f"[DrowsinessDetector] Local models ready on {self.device}")
 
     def _classify_drowsiness(self, person_crop):
@@ -80,15 +83,11 @@ class DrowsinessDetector:
     def _extract_face(self, person_crop):
         if person_crop is None or person_crop.size == 0:
             return None
-        rgb = cv2.cvtColor(person_crop, cv2.COLOR_BGR2RGB)
-        faces = self.face_detector.detect_faces(rgb)
-        if not faces:
+        gray = cv2.cvtColor(person_crop, cv2.COLOR_BGR2GRAY)
+        faces = self.face_detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(32, 32))
+        if len(faces) == 0:
             return None
-        # Find the largest face by bounding box area
-        largest_face = max(faces, key=lambda f: f['box'][2] * f['box'][3])
-        x, y, w, h = largest_face['box']
-        # MTCNN can return negative coordinates if face is near edge
-        x, y = max(0, x), max(0, y)
+        x, y, w, h = max(faces, key=lambda face: face[2] * face[3])
         padding = int(max(w, h) * 0.16)
         y1, y2 = max(0, y - padding), min(person_crop.shape[0], y + h + padding)
         x1, x2 = max(0, x - padding), min(person_crop.shape[1], x + w + padding)
