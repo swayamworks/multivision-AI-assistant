@@ -3,7 +3,7 @@ numpy
 pandas
 Pillow
 opencv-python-headless
-mediapipe
+mediapipe==0.10.11
 av
 streamlit-webrtc
 gTTS
@@ -14,7 +14,6 @@ librosa>=0.10.1
 joblib
 scikit-learn
 xgboost
-opencv-python==4.10.0.84
 torch
 torchvision
 mtcnn
